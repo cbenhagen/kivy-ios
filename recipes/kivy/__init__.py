@@ -1,5 +1,6 @@
-from toolchain import CythonRecipe
+from toolchain import CythonRecipe, shprint
 from os.path import join
+import sh
 
 
 class KivyRecipe(CythonRecipe):
@@ -7,7 +8,8 @@ class KivyRecipe(CythonRecipe):
     url = "https://github.com/kivy/kivy/archive/{version}.zip"
     library = "libkivy.a"
     depends = ["python", "sdl2", "sdl2_image", "sdl2_mixer", "sdl2_ttf", "ios"]
-    pbx_frameworks = ["OpenGLES", "Accelerate"]
+    pbx_frameworks = ["OpenGLES", "Accelerate", "AVFoundation", "CoreVideo",
+                      "CoreMedia"]
     pre_build_ext = True
 
     def get_recipe_env(self, arch):
@@ -21,6 +23,10 @@ class KivyRecipe(CythonRecipe):
 
     def build_arch(self, arch):
         self._patch_setup()
+
+        # this can be removed after the release of kivy version > 1.9.1
+        self._patch_avfoundation()
+
         super(KivyRecipe, self).build_arch(arch)
 
     def _patch_setup(self):
@@ -36,6 +42,20 @@ class KivyRecipe(CythonRecipe):
         #_remove_line(lines, "c_options['use_sdl'] = True")
         with open(pyconfig, "wb") as fd:
             fd.writelines(lines)
+
+    def _patch_avfoundation(self):
+        pyconfig = join(self.build_dir, "setup.py")
+        shprint(
+            sh.sed, "-i.bak",
+            "s/c_options\['use_avfoundation'\] = platform == 'darwin'"
+            "/c_options\['use_avfoundation'\] = platform in \['darwin', 'ios'\]/g",
+            pyconfig)
+
+        camera = join(self.build_dir, "kivy/core/camera/__init__.py")
+        shprint(
+            sh.sed, "-i.bak",
+            "s/elif platform == 'macosx'/elif platform in \['macos', 'ios'\]/g",
+            camera)
 
 
 recipe = KivyRecipe()
